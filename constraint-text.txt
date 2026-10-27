@@ -1,0 +1,109 @@
+
+USE future_portfolio_db;
+
+-- ---------------------------------------------------------------------
+-- Test 1: employment for a company that does not exist
+-- Expected: Error 1452, Cannot add or update a child row:
+--           a foreign key constraint fails (fk_employment_company)
+-- ---------------------------------------------------------------------
+INSERT INTO employment (person_id, company_id, start_date)
+VALUES (1, 99, '2026-06-01');
+
+-- ---------------------------------------------------------------------
+-- Test 2: a duplicate company
+-- Expected: Error 1062, Duplicate entry 'CloudHarbor Software'
+--           for key 'companies.uq_companies_name'
+-- ---------------------------------------------------------------------
+INSERT INTO companies (company_name)
+VALUES ('CloudHarbor Software');
+
+-- ---------------------------------------------------------------------
+-- Test 3: a role without a title
+-- Expected: Error 1048, Column 'role_title' cannot be null
+-- ---------------------------------------------------------------------
+INSERT INTO roles (employment_id, role_title, start_date)
+VALUES (7, NULL, '2026-06-01');
+
+-- ---------------------------------------------------------------------
+-- Test 4: a role that ends before it starts
+-- Expected: Error 3819, Check constraint 'chk_roles_dates' is violated
+-- ---------------------------------------------------------------------
+INSERT INTO roles (employment_id, role_title, start_date, end_date)
+VALUES (7, 'Board Adviser', '2026-06-01', '2025-01-31');
+
+-- ---------------------------------------------------------------------
+-- Test 5: delete a company that still has employment rows
+-- Expected: Error 1451, Cannot delete or update a parent row:
+--           a foreign key constraint fails (fk_employment_company)
+-- ---------------------------------------------------------------------
+DELETE FROM companies
+WHERE company_id = 4;
+
+-- ---------------------------------------------------------------------
+-- Test 6: an award category outside the agreed list
+-- Expected: Error 3819, Check constraint 'chk_awards_category' is violated
+-- ---------------------------------------------------------------------
+INSERT INTO awards (person_id, award_name, awarding_body, award_year, award_category)
+VALUES (1, 'Best Hiker', 'Trekking Club', 2024, 'Personal');
+
+-- ---------------------------------------------------------------------
+-- Test 7: the same project-skill pairing twice
+-- Expected: Error 1062, Duplicate entry '7-6' for key 'project_skills.PRIMARY'
+-- ---------------------------------------------------------------------
+INSERT INTO project_skills (project_id, skill_id)
+VALUES (7, 6);
+
+-- ---------------------------------------------------------------------
+-- Test 8: a negative team size
+-- Expected: Error 3819, Check constraint 'chk_roles_team_size' is violated
+-- ---------------------------------------------------------------------
+UPDATE roles
+SET team_size = -5
+WHERE role_id = 17;
+
+-- ---------------------------------------------------------------------
+-- Test 9: a company with no name
+-- Expected: Error 1364, Field 'company_name' doesn't have a default value
+-- (MySQL's default strict mode rejects a missing required value)
+-- ---------------------------------------------------------------------
+INSERT INTO companies (description)
+VALUES ('A company nobody named');
+
+-- ---------------------------------------------------------------------
+-- Test 10: ON DELETE CASCADE (must SUCCEED)
+-- A test project with one skill link. Deleting the project removes
+-- its project_skills row automatically.
+-- ---------------------------------------------------------------------
+INSERT INTO projects (project_id, project_name)
+VALUES (99, 'Test project for cascade');
+
+INSERT INTO project_skills (project_id, skill_id)
+VALUES (99, 6);
+
+SELECT * FROM project_skills WHERE project_id = 99;  -- 1 row
+
+DELETE FROM projects
+WHERE project_id = 99;
+
+SELECT * FROM project_skills WHERE project_id = 99;  -- 0 rows: cascaded
+
+-- ---------------------------------------------------------------------
+-- Test 11: ON DELETE SET NULL (must SUCCEED)
+-- A test company and an award from it. Deleting the company keeps
+-- the award but empties its company_id.
+-- ---------------------------------------------------------------------
+INSERT INTO companies (company_id, company_name)
+VALUES (99, 'Test Company');
+
+INSERT INTO awards (award_id, person_id, award_name, awarding_body, award_year, award_category, company_id)
+VALUES (99, 1, 'Test Award', 'Test Company', 2020, 'Company', 99);
+
+DELETE FROM companies
+WHERE company_id = 99;
+
+SELECT award_id, award_name, company_id
+FROM awards
+WHERE award_id = 99;                                 -- company_id is now NULL
+
+DELETE FROM awards
+WHERE award_id = 99;                                 -- clean up
